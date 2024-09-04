@@ -16,8 +16,8 @@ REPO_NAME = "automerge"  # Replace with the repo
 repo_path = '/Users/anirudhbhaskar/Documents/Project/automerge'
 repo = git.Repo(repo_path)
 
-# Define main branch
-main_branch = 'main'
+# Define main branch - get from environment variable or default to 'main'
+main_branch = os.getenv("MAIN_BRANCH", "main")
 
 # Retrieves the list of branch names from the GitHub repository
 def get_github_branches():
@@ -77,8 +77,6 @@ def propagate_fix(start_branch, commit_hash):
     return conflicts
 
 
-
-
 @app.route('/propagate-bug-fix', methods=['POST'])
 def propagate_bug_fix():
     # Extract branch and commit hash from the request payload
@@ -99,14 +97,25 @@ def propagate_bug_fix():
     if branch not in branches:
         return jsonify({"success": False, "error": "Invalid branch specified"}), 400
     
+    # Initialize conflicts list to collect any issues
+    conflicts = []
+
     # Propagate the bug fix commit to subsequent branches
-    conflicts = propagate_fix(branch, commit_hash)
+    for b in branches:
+        if b.startswith(branch.split('/')[0]):
+            # Propagate fix if the branch prefix matches
+            print(f"Attempting to propagate fix to branch: {b}")
+            branch_conflicts = propagate_fix(branch, commit_hash)
+            conflicts.extend(branch_conflicts)
     
     # Respond with the outcome of the propagation
     if conflicts:
         return jsonify({"success": False, "conflicts": conflicts}), 400
     else:
-        return jsonify({"success": True, "merged_into": branches + [main_branch]}), 200
+        # Collect all branches that received the fix
+        affected_branches = [branch] + [b for b in branches if b.startswith(branch.split('/')[0])]
+        return jsonify({"success": True, "merged_into": affected_branches + [main_branch]}), 200
+
 
 
 if __name__ == '__main__':
